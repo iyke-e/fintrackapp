@@ -1,7 +1,7 @@
 export const lightTheme = {
   primary: "#00BEC4", // buttons, links, highlights
   secondary: "#FF6B6B", // alerts, secondary buttons
-  background: "#FAFAFA", // app background
+  background: "#fafafa", // app background
   cardBg: "#FFFFFF", // cards, modals
   text: "#121212", // primary text
   subText: "#555555", // secondary text

@@ -7,6 +7,7 @@ export interface AuthState {
   isLoggedIn: boolean;
   user?: any;
   fullName?: string;
+  profilePicture?: string;
   remember: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
   signup: (fullName: string, email: string, password: string) => Promise<void>;
@@ -17,9 +18,11 @@ export interface AuthState {
       isLoggedIn: boolean;
       user: any;
       fullName: string;
+      profilePicture: string;
       remember: boolean;
     }>
   ) => void;
+  updateProfilePicture: (url: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -28,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
       isLoggedIn: false,
       user: undefined,
       fullName: "",
+      profilePicture: undefined,
       remember: false,
 
       login: async (email, password, remember = false) => {
@@ -39,11 +43,13 @@ export const useAuthStore = create<AuthState>()(
           if (error) throw error;
 
           const fullName = data.user?.user_metadata?.full_name || "";
+          const profilePicture = data.user?.user_metadata?.profile_picture;
 
           set({
             isLoggedIn: true,
             user: data.user,
             fullName,
+            profilePicture,
             remember,
           });
         } catch (err) {
@@ -61,7 +67,6 @@ export const useAuthStore = create<AuthState>()(
           });
           if (error) throw error;
 
-          // handle case where user requires email confirmation
           set({
             isLoggedIn: !!data.session,
             user: data.user,
@@ -84,6 +89,7 @@ export const useAuthStore = create<AuthState>()(
             isLoggedIn: false,
             user: undefined,
             fullName: "",
+            profilePicture: undefined,
             remember: false,
           });
         }
@@ -101,21 +107,44 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      updateProfilePicture: async (url: string) => {
+        const prev = get().profilePicture;
+
+        // 1. Optimistic local update
+        set({ profilePicture: url });
+
+        // 2. Sync to Supabase
+        try {
+          const { error } = await supabase.auth.updateUser({
+            data: { profile_picture: url },
+          });
+          if (error) {
+            console.error("Failed to sync profile picture:", error);
+            // revert if sync fails
+            set({ profilePicture: prev });
+          }
+        } catch (err) {
+          console.error("Network error during profile picture sync:", err);
+          // revert on error
+          set({ profilePicture: prev });
+        }
+      },
+
       setAuthState: (state) => set((prev) => ({ ...prev, ...state })),
     }),
     {
       name: "auth-storage",
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist when remember is true
       partialize: (state) =>
         state.remember
           ? {
               isLoggedIn: state.isLoggedIn,
               user: state.user,
               fullName: state.fullName,
+              profilePicture: state.profilePicture,
               remember: state.remember,
             }
-          : { remember: false }, // nothing sensitive saved
+          : { remember: false },
     }
   )
 );
