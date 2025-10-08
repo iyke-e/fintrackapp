@@ -41,10 +41,7 @@ export function TransactionItem({
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>
   ) => (
-    <Pressable
-      style={[styles.deleteBox, { backgroundColor: theme.danger || "red" }]}
-      onPress={() => deleteExpense(id)}
-    >
+    <Pressable style={styles.deleteBox} onPress={() => deleteExpense(id)}>
       <LucideIcons.Trash2 color="#fff" size={20} />
     </Pressable>
   );

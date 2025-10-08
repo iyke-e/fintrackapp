@@ -22,6 +22,7 @@ import { ThemedSafeArea, ThemedText } from "@/component/ThemedComponents";
 import { Button } from "@/component/ui/Button";
 import { ThemedInput } from "@/component/ThemedInput";
 import { useGoogleAuth } from "@/hooks/useGoogleAuth";
+import { supabase } from "@/lib/supabase";
 
 const signupSchema = z.object({
   fullName: z.string().min(2, "Full Name is required"),
@@ -56,7 +57,11 @@ const SignupScreen = () => {
   const handleGoogleSignUp = async () => {
     try {
       await promptGoogleSignIn();
-      router.replace("/(tabs)");
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) router.replace("/(tabs)");
     } catch (err: any) {
       Alert.alert(
         "Google Sign-up Error",

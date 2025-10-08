@@ -1,5 +1,5 @@
 import { ScrollView, StyleSheet, View } from "react-native";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { ThemedSafeArea, ThemedText } from "@/component/ThemedComponents";
 import { Avatar } from "@/component/ui/Avatar";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -9,13 +9,15 @@ import BalanceCard from "@/component/dashboard/BalanceCard";
 import { RecentTransactions } from "@/component/dashboard/Recentranx";
 import { BudgetProgressBar } from "@/component/dashboard/BudgetProgressBar";
 import { useExpenseStore } from "@/store/useExpenseStore";
+import BottomSheet from "@gorhom/bottom-sheet";
+import { SetBudgetBottomSheet } from "@/bottomsheets/BudgetSheet";
 
 export default function Dashboard() {
   const { fullName } = useAuthStore();
   const theme = useAppTheme();
   const { budget, expenses } = useExpenseStore();
+  const sheetRef = useRef<BottomSheet>(null);
 
-  // total expenses for current month
   const totalExpensesThisMonth = useMemo(() => {
     const now = new Date();
     return expenses
@@ -28,6 +30,16 @@ export default function Dashboard() {
       })
       .reduce((sum, e) => sum + e.amount, 0);
   }, [expenses]);
+
+  // 👉 Automatically open budget sheet if no budget is set
+  useEffect(() => {
+    if (budget === 0) {
+      const timer = setTimeout(() => {
+        sheetRef.current?.expand();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [budget]);
 
   return (
     <ThemedSafeArea>
@@ -56,6 +68,12 @@ export default function Dashboard() {
           />
         )}
       </ScrollView>
+
+      {/* Budget bottom sheet */}
+      <SetBudgetBottomSheet
+        ref={sheetRef}
+        onClose={() => sheetRef.current?.close()}
+      />
     </ThemedSafeArea>
   );
 }

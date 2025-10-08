@@ -1,4 +1,3 @@
-import { AddExpenseBottomSheet } from "@/bottomsheets/ExpenseSheet";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { Tabs } from "expo-router";
 import {
@@ -11,6 +10,7 @@ import {
 import React, { useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import BottomSheet from "@gorhom/bottom-sheet";
+import AddExpenseBottomSheet from "@/bottomsheets/ExpenseSheet";
 
 export default function AppLayout() {
   const theme = useAppTheme();

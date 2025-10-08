@@ -1,3 +1,4 @@
+import "react-native-reanimated";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";

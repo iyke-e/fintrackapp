@@ -9,20 +9,13 @@ export interface AuthState {
   fullName?: string;
   profilePicture?: string;
   remember: boolean;
+
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
   signup: (fullName: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
-  setAuthState: (
-    state: Partial<{
-      isLoggedIn: boolean;
-      user: any;
-      fullName: string;
-      profilePicture: string;
-      remember: boolean;
-    }>
-  ) => void;
   updateProfilePicture: (url: string) => Promise<void>;
+  setAuthState: (state: Partial<AuthState>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -42,18 +35,24 @@ export const useAuthStore = create<AuthState>()(
           });
           if (error) throw error;
 
-          const fullName = data.user?.user_metadata?.full_name || "";
-          const profilePicture = data.user?.user_metadata?.profile_picture;
+          // Always fetch fresh user metadata
+          const { data: freshUser, error: userError } =
+            await supabase.auth.getUser();
+          if (userError) throw userError;
+
+          const user = freshUser.user;
+          const fullName = user?.user_metadata?.full_name || "";
+          const profilePicture = user?.user_metadata?.profile_picture;
 
           set({
             isLoggedIn: true,
-            user: data.user,
+            user,
             fullName,
             profilePicture,
             remember,
           });
-        } catch (err) {
-          console.error("Login error:", err);
+        } catch (err: any) {
+          console.error("Login error:", err.message || err);
           throw err;
         }
       },
@@ -63,18 +62,29 @@ export const useAuthStore = create<AuthState>()(
           const { data, error } = await supabase.auth.signUp({
             email,
             password,
-            options: { data: { full_name: fullName } },
+            options: {
+              data: { full_name: fullName },
+            },
           });
           if (error) throw error;
 
+          // Get fresh user after signup
+          const { data: freshUser, error: userError } =
+            await supabase.auth.getUser();
+          if (userError) throw userError;
+
+          const user = freshUser.user;
+          const profilePicture = user?.user_metadata?.profile_picture;
+
           set({
             isLoggedIn: !!data.session,
-            user: data.user,
+            user,
             fullName,
+            profilePicture,
             remember: true,
           });
-        } catch (err) {
-          console.error("Signup error:", err);
+        } catch (err: any) {
+          console.error("Signup error:", err.message || err);
           throw err;
         }
       },
@@ -82,8 +92,8 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         try {
           await supabase.auth.signOut();
-        } catch (err) {
-          console.error("Logout error:", err);
+        } catch (err: any) {
+          console.error("Logout error:", err.message || err);
         } finally {
           set({
             isLoggedIn: false,
@@ -98,11 +108,11 @@ export const useAuthStore = create<AuthState>()(
       forgotPassword: async (email) => {
         try {
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: "yourapp://auth/callback",
+            redirectTo: "yourapp://auth/callback", // ✅ make sure deep link is configured
           });
           if (error) throw error;
-        } catch (err) {
-          console.error("Forgot password error:", err);
+        } catch (err: any) {
+          console.error("Forgot password error:", err.message || err);
           throw err;
         }
       },
@@ -110,22 +120,27 @@ export const useAuthStore = create<AuthState>()(
       updateProfilePicture: async (url: string) => {
         const prev = get().profilePicture;
 
-        // 1. Optimistic local update
+        // Optimistic update
         set({ profilePicture: url });
 
-        // 2. Sync to Supabase
         try {
           const { error } = await supabase.auth.updateUser({
             data: { profile_picture: url },
           });
-          if (error) {
-            console.error("Failed to sync profile picture:", error);
-            // revert if sync fails
-            set({ profilePicture: prev });
-          }
-        } catch (err) {
-          console.error("Network error during profile picture sync:", err);
-          // revert on error
+          if (error) throw error;
+
+          // Fetch latest user after update
+          const { data: freshUser, error: userError } =
+            await supabase.auth.getUser();
+          if (userError) throw userError;
+
+          const user = freshUser.user;
+          set({
+            user,
+            profilePicture: user?.user_metadata?.profile_picture || url,
+          });
+        } catch (err: any) {
+          console.error("Profile picture update failed:", err.message || err);
           set({ profilePicture: prev });
         }
       },

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,14 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
-import { decode } from "base64-arraybuffer";
 import { Edit3 } from "lucide-react-native";
 import { useAuthStore } from "@/store/useAuthStore";
 import { supabase } from "@/lib/supabase";
 
 interface AvatarProps {
   size?: number;
-  editable?: boolean; // if true, show edit icon
-  onPress?: () => void; // can also be used for menus
+  editable?: boolean;
+  onPress?: () => void;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -27,13 +26,14 @@ export const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const { user, fullName, profilePicture, updateProfilePicture } =
     useAuthStore();
-  const [uploading, setUploading] = React.useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const initials = useMemo(() => {
     if (!fullName) return "?";
     const parts = fullName.trim().split(" ");
-    if (parts.length === 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts.length === 1
+      ? parts[0][0].toUpperCase()
+      : (parts[0][0] + parts[1][0]).toUpperCase();
   }, [fullName]);
 
   const pickImage = async () => {
@@ -41,52 +41,64 @@ export const Avatar: React.FC<AvatarProps> = ({
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
       quality: 0.7,
     });
 
-    if (!result.canceled) {
-      try {
-        setUploading(true);
-        const uri = result.assets[0].uri;
-        const fileExt = uri.split(".").pop() || "jpg";
-        const fileName = `${user?.id}_${Date.now()}.${fileExt}`;
-        const filePath = `avatars/${fileName}`;
+    if (result.canceled) return;
 
-        // ✅ Read file as base64
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: "base64",
+    try {
+      setUploading(true);
+
+      const asset = result.assets[0];
+      const uri = asset.uri;
+
+      // ✅ Read file as base64, then convert to bytes
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const fileBytes = new Uint8Array(
+        atob(base64)
+          .split("")
+          .map((c) => c.charCodeAt(0))
+      );
+
+      const fileExt = (uri.split(".").pop() || "jpg").toLowerCase();
+      const fileName = `${user?.id ?? "anon"}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const contentType = `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+
+      // ✅ Upload to Supabase Storage
+      const { error } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, fileBytes, {
+          contentType,
+          upsert: true,
         });
 
-        // ✅ Upload to Supabase as binary
-        const { error } = await supabase.storage
-          .from("avatars")
-          .upload(filePath, decode(base64), {
-            contentType: `image/${fileExt}`,
-            upsert: true,
-          });
+      if (error) throw error;
 
-        if (error) throw error;
+      // ✅ Get public URL
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("avatars").getPublicUrl(filePath);
-
-        // ✅ Update local + Supabase profile
-        await updateProfilePicture(publicUrl);
-      } catch (e) {
-        console.error("Upload error:", e);
-      } finally {
-        setUploading(false);
+      if (data?.publicUrl) {
+        await updateProfilePicture(data.publicUrl);
+        console.log("Avatar uploaded ->", data.publicUrl);
       }
+    } catch (e) {
+      console.error("Upload error:", e);
+    } finally {
+      setUploading(false);
     }
   };
 
-  const Container = onPress ? TouchableOpacity : View;
-
   return (
     <View style={{ alignItems: "center", justifyContent: "center" }}>
-      <Container
+      <TouchableOpacity
         onPress={onPress || pickImage}
+        disabled={!editable && !onPress}
         style={[
           styles.container,
           { width: size, height: size, borderRadius: size / 2 },
@@ -96,6 +108,9 @@ export const Avatar: React.FC<AvatarProps> = ({
           <Image
             source={{ uri: profilePicture }}
             style={{ width: size, height: size, borderRadius: size / 2 }}
+            onError={(e) =>
+              console.warn("Avatar image load error:", e.nativeEvent)
+            }
           />
         ) : (
           <View
@@ -115,7 +130,7 @@ export const Avatar: React.FC<AvatarProps> = ({
             <ActivityIndicator color="#fff" />
           </View>
         )}
-      </Container>
+      </TouchableOpacity>
 
       {editable && (
         <TouchableOpacity
@@ -138,17 +153,17 @@ export const Avatar: React.FC<AvatarProps> = ({
 const styles = StyleSheet.create({
   container: {
     overflow: "hidden",
-    backgroundColor: "#e5e7eb", // gray-200 fallback
+    backgroundColor: "#e5e7eb",
     justifyContent: "center",
     alignItems: "center",
   },
   fallback: {
-    backgroundColor: "#d1d5db", // gray-300
+    backgroundColor: "#d1d5db",
     justifyContent: "center",
     alignItems: "center",
   },
   initials: {
-    color: "#111827", // gray-900
+    color: "#111827",
     fontWeight: "600",
   },
   loadingOverlay: {

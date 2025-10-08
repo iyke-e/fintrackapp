@@ -1,5 +1,3 @@
-import { useRouter } from "expo-router";
-import { Check } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   Alert,
@@ -10,6 +8,8 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { Check } from "lucide-react-native";
 
 import Google from "@/assets/svgs/google.svg";
 import Logo from "@/assets/svgs/logo.svg";
@@ -17,11 +17,13 @@ import Logo from "@/assets/svgs/logo.svg";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import * as z from "zod";
+
 import { useAuthStore } from "@/store/useAuthStore";
 import { useGoogleAuth } from "@/hooks/useGoogleAuth";
 import { ThemedSafeArea, ThemedText } from "@/component/ThemedComponents";
 import { ThemedInput } from "@/component/ThemedInput";
 import { Button } from "@/component/ui/Button";
+import { supabase } from "@/lib/supabase";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -33,8 +35,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const LoginScreen = () => {
   const router = useRouter();
   const login = useAuthStore((state) => state.login);
-  const { promptGoogleSignIn } = useGoogleAuth(); // hook for Google login
-
+  const { promptGoogleSignIn } = useGoogleAuth();
   const [rememberMe, setRememberMe] = useState(true);
 
   const {
@@ -46,6 +47,7 @@ const LoginScreen = () => {
     defaultValues: { email: "", password: "" },
   });
 
+  // Normal email/password login
   const onSubmit = async (data: LoginFormData) => {
     try {
       await login(data.email, data.password, rememberMe);
@@ -55,11 +57,21 @@ const LoginScreen = () => {
     }
   };
 
+  // Google OAuth login
   const handleGoogleSignIn = async () => {
     try {
       await promptGoogleSignIn();
-      // You may want to reload your store state after OAuth succeeds
-      router.replace("/(tabs)");
+
+      // wait for session confirmation
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        router.replace("/(tabs)");
+      } else {
+        Alert.alert("Login failed", "Could not retrieve user session");
+      }
     } catch (err: any) {
       Alert.alert(
         "Google Sign-in Error",
@@ -117,6 +129,7 @@ const LoginScreen = () => {
                   />
                 )}
               />
+
               <Controller
                 control={control}
                 name="password"
